@@ -7,14 +7,15 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-:root { --green:#00b900; --bg:#f8f9fa; }
+:root { --green:#00b900; --bg:#f8f9fa; --blue: #007bff; }
 body { font-family:sans-serif; background:var(--bg); padding:15px; margin:0; }
 .card { background:white; padding:20px; border-radius:15px; box-shadow:0 4px 10px rgba(0,0,0,0.05); margin-bottom:15px; }
-input, select { width:100%; padding:12px; margin:8px 0; border:1px solid #ddd; border-radius:8px; font-size:16px; box-sizing: border-box; }
+input, select, textarea { width:100%; padding:12px; margin:8px 0; border:1px solid #ddd; border-radius:8px; font-size:16px; box-sizing: border-box; }
 .btn { width:100%; padding:15px; border:none; border-radius:10px; font-size:16px; font-weight:bold; color:white; background:var(--green); cursor:pointer; }
 .hidden { display:none!important; }
 .label { font-size:14px; color:#666; margin-top:10px; font-weight:bold; }
 .info-row { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding: 10px 0; font-size: 14px; }
+.section-title { color: var(--green); border-left: 4px solid var(--green); padding-left: 10px; margin-bottom: 15px; font-size: 18px; }
 </style>
 </head>
 <body>
@@ -25,8 +26,9 @@ input, select { width:100%; padding:12px; margin:8px 0; border:1px solid #ddd; b
     <h2 style="color:var(--green);margin-top:0;">👋 員工入職登錄</h2>
     <div class="label">姓名</div><input type="text" id="reg-name">
     <div class="label">電話</div><input type="tel" id="reg-phone">
+    <div class="label">地址</div><input type="text" id="reg-address">
     <div class="label">到職日期</div><input type="date" id="reg-date">
-    <button class="btn" style="margin-top:20px;" onclick="submitReg()">提交並綁定 LINE ID</button>
+    <button class="btn" style="margin-top:20px;" onclick="submitReg()">提交資料並完成綁定</button>
 </div>
 
 <div id="main-ui" class="hidden">
@@ -38,22 +40,30 @@ input, select { width:100%; padding:12px; margin:8px 0; border:1px solid #ddd; b
     <button class="btn" style="margin-bottom:15px;" onclick="doCheck()">📍 上下班打卡</button>
 
     <div class="card">
-        <h3 style="margin-top:0; color:var(--green);">💰 薪資與考績達成率</h3>
-        <div id="salary-data">老闆核定中...</div>
+        <p class="section-title">💰 薪資單</p>
+        <div id="salary-data">薪資資料待老闆核定...</div>
     </div>
 
     <div class="card">
-        <h3 style="margin-top:0; color:var(--green);">📅 請假申請</h3>
+        <p class="section-title">📅 請假申請</p>
         <select id="l-type"><option>特休</option><option>病假</option><option>事假</option></select>
         <input type="date" id="l-date">
-        <button class="btn" style="background:#007bff;" onclick="submitLeave()">送出假單</button>
+        <textarea id="l-reason" placeholder="請假事由"></textarea>
+        <button class="btn" style="background:var(--blue);" onclick="submitLeave()">送出假單</button>
+    </div>
+
+    <div class="card">
+        <p class="section-title">📈 考績達成率</p>
+        <div id="perf-data">考績評定中...</div>
     </div>
 </div>
 
 <script>
+// ====== 請填寫您的金鑰 ======
 const S_URL = 'https://wbfaietjjgfgmgncxkbt.supabase.co';
 const S_KEY = 'sb_publishable_H5C7ddbzCgfKUp7MAQrUDQ_A9mGl_Pk';
 const L_ID  = '2009127303-4vmwjtZT';
+// =========================
 
 let supabaseClient;
 let currentUserId = null;
@@ -73,8 +83,8 @@ async function checkUser(profile) {
     const { data, error } = await supabaseClient.from('employees').select('*').eq('line_id', currentUserId).maybeSingle();
     document.getElementById('loader').classList.add('hidden');
     if (data) { 
-        showMainUI(data); 
-        fetchPerformance(); // 同步抓取考績
+        showMainUI(data);
+        fetchPerformance();
     } else { 
         document.getElementById('reg-ui').classList.remove('hidden');
         document.getElementById('reg-name').value = profile.displayName;
@@ -83,10 +93,13 @@ async function checkUser(profile) {
 
 async function submitReg() {
     const name = document.getElementById('reg-name').value;
+    const phone = document.getElementById('reg-phone').value;
+    const address = document.getElementById('reg-address').value;
     const date = document.getElementById('reg-date').value;
     if(!name || !date) return alert("請填寫姓名與到職日");
+
     const { error } = await supabaseClient.from('employees').insert([{
-        line_id: currentUserId, name, onboard_date: date, annual_leave_taken: 0, is_admin: false
+        line_id: currentUserId, name, phone, address, onboard_date: date, annual_leave_taken: 0, is_admin: false
     }]);
     if (!error) { alert("註冊成功！"); location.reload(); }
 }
@@ -95,7 +108,7 @@ function showMainUI(user) {
     document.getElementById('main-ui').classList.remove('hidden');
     document.getElementById('u-name').innerText = user.name;
     
-    // 自動核算年資假
+    // 自動核算特休
     const start = new Date(user.onboard_date);
     const months = (new Date() - start) / (1000*60*60*24*30);
     let total = months >= 12 ? 7 : (months >= 6 ? 3 : 0);
@@ -105,9 +118,9 @@ function showMainUI(user) {
     if (user.base_salary > 0) {
         document.getElementById('salary-data').innerHTML = `
             <div class="info-row"><span>底薪</span><span>$${user.base_salary}</span></div>
-            <div class="info-row"><span>全勤</span><span>$${user.full_attendance_bonus || 0}</span></div>
+            <div class="info-row"><span>全勤獎金</span><span>$${user.full_attendance_bonus || 0}</span></div>
             <div class="info-row"><span>勞健保扣款</span><span>-$${user.labor_health_ins || 0}</span></div>
-            <div id="perf-row"></div>
+            <div class="info-row" style="font-weight:bold; color:var(--green);"><span>本月實領預估</span><span>$${user.base_salary + (user.full_attendance_bonus || 0) - (user.labor_health_ins || 0)}</span></div>
         `;
     }
 }
@@ -115,9 +128,10 @@ function showMainUI(user) {
 async function fetchPerformance() {
     const { data } = await supabaseClient.from('performance').select('*').eq('line_id', currentUserId).order('id', {ascending:false}).limit(1).maybeSingle();
     if (data) {
-        document.getElementById('perf-row').innerHTML = `
-            <div class="info-row" style="color:blue;"><span>考績成績</span><span>${data.score} 分</span></div>
-            <div class="info-row" style="color:blue; font-weight:bold;"><span>達成率</span><span>${(data.achievement_rate * 100).toFixed(0)}%</span></div>
+        document.getElementById('perf-data').innerHTML = `
+            <div class="info-row"><span>考績成績</span><span>${data.score} 分</span></div>
+            <div class="info-row"><span>目標達成率</span><span style="font-weight:bold; color:blue;">${(data.achievement_rate * 100).toFixed(0)}%</span></div>
+            <div class="info-row"><span>老闆評語</span><span>${data.comments || '無'}</span></div>
         `;
     }
 }
@@ -129,7 +143,9 @@ async function doCheck() {
 
 async function submitLeave() {
     const { error } = await supabaseClient.from('leave_requests').insert([{ 
-        line_id: currentUserId, type: document.getElementById('l-type').value, start_dt: document.getElementById('l-date').value, status: '待核准' 
+        line_id: currentUserId, type: document.getElementById('l-type').value, 
+        start_dt: document.getElementById('l-date').value, 
+        reason: document.getElementById('l-reason').value, status: '待核准' 
     }]);
     if (!error) alert("假單已送出，待老闆核准");
 }
@@ -138,4 +154,3 @@ init();
 </script>
 </body>
 </html>
-
