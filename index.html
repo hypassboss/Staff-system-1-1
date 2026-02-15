@@ -7,148 +7,160 @@
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
     <style>
-        :root { --main: #00b900; --bg: #f8f9fa; }
-        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 0; color: #333; }
-        .header { background: var(--main); color: white; padding: 25px; text-align: center; border-radius: 0 0 25px 25px; }
-        .container { padding: 15px; max-width: 500px; margin: auto; }
-        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        .btn { width: 100%; padding: 15px; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .btn-primary { background: var(--main); color: white; }
-        .btn-primary:active { transform: scale(0.98); opacity: 0.9; }
+        :root { --main-color: #00b900; --bg-color: #f8f9fa; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg-color); margin: 0; padding: 0; color: #333; }
+        .header { background: var(--main-color); color: white; padding: 30px 20px; text-align: center; border-radius: 0 0 25px 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .container { padding: 20px; max-width: 500px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 18px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        input, select { width: 100%; padding: 14px; margin: 10px 0; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; font-size: 16px; }
+        .btn { width: 100%; padding: 16px; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+        .btn-primary { background: var(--main-color); color: white; }
+        .btn-primary:active { opacity: 0.8; transform: scale(0.98); }
         .hidden { display: none; }
-        .info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .info-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px dotted #eee; }
+        .leave-badge { color: var(--main-color); font-weight: bold; font-size: 1.2em; }
     </style>
 </head>
 <body>
 
 <div class="header">
     <h2 style="margin:0;">HYPASS 管理系統 1-1</h2>
-    <div id="status" style="font-size:12px; margin-top:5px;">系統啟動中...</div>
+    <div id="conn-status" style="font-size:12px; margin-top:8px; opacity:0.9;">系統載入中...</div>
 </div>
 
 <div class="container">
-    <div id="loader" style="text-align:center; padding:50px;">讀取資料中...</div>
+    <div id="loader" style="text-align:center; padding:40px;">讀取員工資料...</div>
 
     <div id="reg-ui" class="card hidden">
-        <h3 style="margin-top:0;">👋 歡迎入職</h3>
-        <p style="color:gray; font-size:14px;">請填寫基本資料完成系統綁定</p>
+        <h3 style="margin-top:0;">👋 新員工入職登錄</h3>
+        <p style="color:gray; font-size:14px;">請填寫以下資訊，系統將自動綁定您的 LINE ID</p>
         <input type="text" id="reg-name" placeholder="真實姓名">
         <input type="tel" id="reg-phone" placeholder="電話號碼">
         <input type="text" id="reg-addr" placeholder="通訊地址">
-        <label style="font-size:12px; color:gray;">到職日期：</label>
+        <label style="font-size:12px; color:gray; padding-left:5px;">到職日期：</label>
         <input type="date" id="reg-date">
-        <button class="btn btn-primary" onclick="submitReg()">提交資料並領取識別碼</button>
+        <button class="btn btn-primary" onclick="handleRegister()">提交資料並開通系統</button>
     </div>
 
     <div id="main-ui" class="hidden">
         <div class="card">
-            <h2 id="u-name" style="margin:0;">姓名</h2>
-            <p id="u-onboard" style="color:gray; font-size:14px; margin:5px 0;">到職日：----</p>
-            <hr>
-            <div class="info-row"><span>特休(年資假)總額</span><span id="u-leave-total">0 天</span></div>
-            <div class="info-row"><span>剩餘可休天數</span><span id="u-leave-rem" style="color:var(--main); font-weight:bold;">0 天</span></div>
+            <h2 id="u-name" style="margin:0;">----</h2>
+            <p id="u-onboard" style="color:gray; font-size:14px; margin:8px 0;">到職日：----</p>
+            <hr style="border:0; border-top:1px solid #f0f0f0;">
+            <div class="info-row">
+                <span>特休(年資假)總額</span>
+                <span id="u-leave-total">0 天</span>
+            </div>
+            <div class="info-row">
+                <span>剩餘可休天數</span>
+                <span id="u-leave-rem" class="leave-badge">0 天</span>
+            </div>
         </div>
 
-        <button class="btn btn-primary" style="margin-bottom:20px;" onclick="doCheck()">📍 上下班打卡</button>
+        <button class="btn btn-primary" onclick="handleClockIn()">📍 上下班打卡</button>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
-            <div class="card" style="text-align:center; margin:0;" onclick="showSalary()">💰 薪資查詢</div>
-            <div class="card" style="text-align:center; margin:0;" onclick="alert('請假申請功能連線中')">📅 請假申請</div>
-            <div class="card" style="text-align:center; margin:0;" onclick="showPerf()">📈 考績達成率</div>
-            <div class="card" style="text-align:center; margin:0;" onclick="location.reload()">🔄 刷新系統</div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:15px;">
+            <div class="card" style="text-align:center; margin:0; padding:15px;" onclick="checkSalary()">💰 薪資查詢</div>
+            <div class="card" style="text-align:center; margin:0; padding:15px;" onclick="checkPerf()">📈 考績達成率</div>
+            <div class="card" style="text-align:center; margin:0; padding:15px;" onclick="alert('請假功能開發中')">📅 申請請假</div>
+            <div class="card" style="text-align:center; margin:0; padding:15px;" onclick="location.reload()">🔄 刷新系統</div>
         </div>
     </div>
 </div>
 
 <script>
-    // ⚠️ 請填入您的資訊
+    // ==========================================
+    // ⚠️ 老闆請在此處填入您的資訊
+    // ==========================================
     const S_URL = 'https://wbfaietjjgfgmgncxkbt.supabase.co';
     const S_KEY = 'sb_publishable_H5C7ddbzCgfKUp7MAQrUDQ_A9mGl_Pk';
     const L_ID = '2009127303-4vmwjtZT';
 
     const supabase = supabase.createClient(S_URL, S_KEY);
-    let myData = null;
+    let currentUser = null;
 
     async function init() {
         try {
             await liff.init({ liffId: L_ID });
-            if (!liff.isLoggedIn()) { liff.login(); }
-            else { checkUser(); }
-        } catch (e) { document.getElementById('status').innerText = "啟動錯誤: " + e; }
-    }
-
-    async function checkUser() {
-        const profile = await liff.getProfile();
-        const { data, error } = await supabase.from('employees').select('*').eq('line_id', profile.userId).single();
-        
-        document.getElementById('loader').classList.add('hidden');
-        if (data) {
-            myData = data;
-            renderMain(data);
-        } else {
-            document.getElementById('reg-ui').classList.remove('hidden');
-            document.getElementById('status').innerText = "身分：新進員工";
+            if (!liff.isLoggedIn()) {
+                liff.login();
+            } else {
+                fetchUserInfo();
+            }
+        } catch (e) {
+            document.getElementById('conn-status').innerText = "連線失敗: " + e.message;
         }
     }
 
-    async function submitReg() {
+    async function fetchUserInfo() {
         const profile = await liff.getProfile();
-        const row = {
-            line_id: profile.userId,
-            name: document.getElementById('reg-name').value,
-            phone: document.getElementById('reg-phone').value,
-            address: document.getElementById('reg-addr').value,
-            onboard_date: document.getElementById('reg-date').value
-        };
-        if(!row.name || !row.onboard_date) return alert("姓名與到職日必填！");
-        
-        const { error } = await supabase.from('employees').insert([row]);
-        if(!error) { alert("登錄成功！請通知老闆設定薪資"); location.reload(); }
-        else { alert("提交失敗：" + error.message); }
+        const { data, error } = await supabase
+            .from('employees')
+            .select('*')
+            .eq('line_id', profile.userId)
+            .single();
+
+        document.getElementById('loader').classList.add('hidden');
+
+        if (data) {
+            currentUser = data;
+            renderDashboard(data);
+        } else {
+            document.getElementById('reg-ui').classList.remove('hidden');
+            document.getElementById('conn-status').innerText = "狀態：待註冊新員工";
+        }
     }
 
-    function renderMain(user) {
+    async function handleRegister() {
+        const profile = await liff.getProfile();
+        const name = document.getElementById('reg-name').value;
+        const phone = document.getElementById('reg-phone').value;
+        const addr = document.getElementById('reg-addr').value;
+        const date = document.getElementById('reg-date').value;
+
+        if (!name || !date) return alert("請務必填寫姓名與到職日期");
+
+        const { error } = await supabase.from('employees').insert([{
+            line_id: profile.userId,
+            name: name,
+            phone: phone,
+            address: addr,
+            onboard_date: date
+        }]);
+
+        if (!error) {
+            alert("註冊成功！歡迎加入 HYPASS");
+            location.reload();
+        } else {
+            alert("註冊失敗：" + error.message);
+        }
+    }
+
+    function renderDashboard(user) {
         document.getElementById('main-ui').classList.remove('hidden');
         document.getElementById('u-name').innerText = user.name;
         document.getElementById('u-onboard').innerText = "到職日：" + user.onboard_date;
-        document.getElementById('status').innerText = "✅ 系統已連線";
+        document.getElementById('conn-status').innerText = "✅ 系統已就緒";
 
-        // 年資假計算邏輯：滿半年給 3 天，滿一年給 7 天 (依台灣勞基法簡易版)
+        // 自動計算年資假 (勞基法簡易版：半年3天, 一年7天, 兩年10天)
         const onboard = new Date(user.onboard_date);
-        const diffMonth = (new Date() - onboard) / (1000 * 60 * 60 * 24 * 30);
-        let total = 0;
-        if (diffMonth >= 12) total = 7;
-        else if (diffMonth >= 6) total = 3;
+        const months = (new Date() - onboard) / (1000 * 60 * 60 * 24 * 30.44);
         
-        document.getElementById('u-leave-total').innerText = total + " 天";
-        document.getElementById('u-leave-rem').innerText = (total - (user.annual_leave_taken || 0)) + " 天";
+        let totalLeave = 0;
+        if (months >= 24) totalLeave = 10;
+        else if (months >= 12) totalLeave = 7;
+        else if (months >= 6) totalLeave = 3;
+
+        document.getElementById('u-leave-total').innerText = totalLeave + " 天";
+        document.getElementById('u-leave-rem').innerText = (totalLeave - (user.annual_leave_taken || 0)) + " 天";
     }
 
-    async function doCheck() {
+    async function handleClockIn() {
         const profile = await liff.getProfile();
-        const { error } = await supabase.from('attendance').insert([{ line_id: profile.userId, type: '上班' }]);
-        if (!error) alert("打卡紀錄已存入資料庫！");
+        // 如果有開啟 LIFF Location 權限，這裡可以抓 GPS
+        const { error } = await supabase.from('attendance').insert([{
+            line_id: profile.userId,
+            type: '上班'
+        }]);
+        if (!error) alert("打卡紀錄已成功存入資料庫！");
     }
-
-    function showSalary() {
-        if (!myData.base_salary || myData.base_salary === 0) {
-            alert("薪資單尚未核定，請聯繫老闆設定底薪與獎金。");
-        } else {
-            const final = myData.base_salary + myData.full_attendance_bonus - myData.labor_health_ins;
-            alert(`【薪資明細】\n底薪：$${myData.base_salary}\n全勤：$${myData.full_attendance_bonus}\n扣款：-$${myData.labor_health_ins}\n----\n實領：$${final}`);
-        }
-    }
-
-    async function showPerf() {
-        const { data } = await supabase.from('performance').select('*').eq('line_id', myData.line_id).order('id', {ascending:false}).limit(1).single();
-        if (data) alert(`【季度考績】\n達成率：${data.achievement_rate * 100}%\n老闆評語：${data.comments || '加油！'}`);
-        else alert("尚無考績紀錄。");
-    }
-
-    init();
-</script>
-</body>
-</html>
-
-
