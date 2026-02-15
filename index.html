@@ -7,48 +7,54 @@
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
     <style>
-        :root { --main-green: #00b900; --bg-gray: #f8f9fa; }
-        body { font-family: sans-serif; background: var(--bg-gray); margin: 0; padding: 0; }
-        .header { background: var(--main-green); color: white; padding: 25px; text-align: center; border-radius: 0 0 25px 25px; }
-        .container { padding: 15px; }
-        .status-box { background: white; padding: 20px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .btn-main { background: var(--main-green); color: white; border: none; width: 100%; padding: 15px; border-radius: 10px; font-size: 18px; font-weight: bold; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; }
-        .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .menu-item { background: white; padding: 20px; border-radius: 12px; text-align: center; border: 1px solid #eee; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        :root { --main-green: #00b900; --bg: #f8f9fa; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 0; }
+        .header { background: var(--main-green); color: white; padding: 25px; text-align: center; border-radius: 0 0 25px 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .container { padding: 15px; max-width: 500px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .user-name { font-size: 20px; font-weight: bold; margin: 0; }
+        .user-detail { color: #666; font-size: 14px; margin-top: 5px; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 12px; font-size: 17px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.2s; }
+        .btn-checkin { background: var(--main-green); color: white; }
+        .btn-checkin:active { background: #009500; }
+        .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+        .menu-item { background: white; padding: 20px; border-radius: 15px; text-align: center; border: 1px solid #eee; font-weight: bold; cursor: pointer; }
+        .menu-item i { display: block; font-size: 24px; margin-bottom: 8px; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <h2 style="margin:0;">員工管理系統 1-1</h2>
-    <div id="conn-status" style="font-size:12px; margin-top:5px;">正在連接資料庫...</div>
+    <h2 style="margin:0;">HYPASS 管理系統 1-1</h2>
+    <div id="conn-status" style="font-size:12px; opacity:0.8;">資料庫連線中...</div>
 </div>
 
 <div class="container">
-    <div class="status-box">
-        <h3 id="user-name" style="margin:0;">載入中...</h3>
-        <p id="user-detail" style="color:gray; font-size:14px; margin:10px 0 0 0;">正在讀取基本資料...</p>
+    <div class="card">
+        <p id="user-name" class="user-name">載入中...</p>
+        <p id="user-detail" class="user-detail">正在同步員工檔案...</p>
     </div>
 
-    <button class="btn-main" onclick="handleCheckIn()">📍 上下班打卡</button>
+    <button class="btn btn-checkin" onclick="handleCheckIn()">📍 上下班打卡</button>
 
     <div class="menu-grid">
-        <div class="menu-item" onclick="alert('基本資料模組連結中')">👤 基本資料</div>
-        <div class="menu-item" onclick="alert('薪資查詢模組連結中')">💰 薪資查詢</div>
-        <div class="menu-item" onclick="alert('請假申請模組連結中')">📅 請假申請</div>
-        <div class="menu-item" onclick="alert('考績達成率模組連結中')">📈 考績達成率</div>
+        <div class="menu-item" onclick="showBasic()">👤 基本資料</div>
+        <div class="menu-item" onclick="showSalary()">💰 薪資查詢</div>
+        <div class="menu-item" onclick="showLeave()">📅 請假申請</div>
+        <div class="menu-item" onclick="showPerf()">📈 考績達成率</div>
     </div>
 </div>
 
 <script>
     // ⚠️ 請填入您的專屬資訊
     const SUPABASE_URL = 'https://wbfaietjjgfgmgncxkbt.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_H5C7ddbzCgfKUp7MAQrUDQ_A9mGl_Pk';
+    const SUPABASE_KEY = 'sb_publishable_H5C7ddbzCgfKUp7MAQrUDQ_A9mGl_Pk'; 
     const LIFF_ID = '2009127303-uI5m9ZYG';
 
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let currentUser = null;
 
-    async function initSystem() {
+    async function init() {
         try {
             await liff.init({ liffId: LIFF_ID });
             if (!liff.isLoggedIn()) {
@@ -56,40 +62,56 @@
             } else {
                 const profile = await liff.getProfile();
                 document.getElementById('user-name').innerText = profile.displayName;
-                document.getElementById('conn-status').innerText = "連線成功：資料庫已就緒";
-                loadEmployeeData(profile.userId);
+                document.getElementById('conn-status').innerText = "✅ 系統已就緒";
+                loadEmployee(profile.userId);
             }
         } catch (err) {
-            document.getElementById('conn-status').innerText = "連線失敗: " + err.message;
+            document.getElementById('conn-status').innerText = "❌ 連線失敗: " + err.message;
         }
     }
 
-    async function loadEmployeeData(lineId) {
-        const { data, error } = await supabase
-            .from('employees')
-            .select('*')
-            .eq('line_id', lineId)
-            .single();
-        
+    async function loadEmployee(lineId) {
+        const { data, error } = await supabaseClient.from('employees').select('*').eq('line_id', lineId).single();
         if (data) {
-            document.getElementById('user-detail').innerText = `部門：${data.department || '未設定'} | 入職：${data.onboard_date}`;
+            currentUser = data;
+            document.getElementById('user-detail').innerText = `入職：${data.onboard_date} | 特休：${data.annual_leave_days}天`;
         } else {
-            document.getElementById('user-detail').innerText = "新進員工，請聯繫老闆建立資料";
+            document.getElementById('user-detail').innerText = "未登錄員工，請聯繫老闆綁定 LINE ID";
         }
     }
 
     async function handleCheckIn() {
         const profile = await liff.getProfile();
-        const { error } = await supabase.from('attendance').insert([
-            { line_id: profile.userId, type: '打卡' }
-        ]);
-        if (!error) alert("打卡成功！時間已存入資料庫");
+        const { error } = await supabaseClient.from('attendance').insert([{ line_id: profile.userId, type: '打卡' }]);
+        if (!error) alert("📍 打卡成功！時間已存入後台。");
     }
 
-    initSystem();
-</script>
+    function showBasic() {
+        if (!currentUser) return;
+        alert(`【員工檔案】\n姓名：${currentUser.name}\n電話：${currentUser.phone}\n地址：${currentUser.address}`);
+    }
 
+    function showSalary() {
+        if (!currentUser) return;
+        const total = currentUser.base_salary + currentUser.full_attendance_bonus - currentUser.labor_health_ins;
+        alert(`【本月薪資明細】\n底薪：$${currentUser.base_salary}\n全勤：$${currentUser.full_attendance_bonus}\n勞健保：-$${currentUser.labor_health_ins}\n--------------\n實領：$${total}`);
+    }
+
+    async function showPerf() {
+        const profile = await liff.getProfile();
+        const { data } = await supabaseClient.from('performance').select('*').eq('line_id', profile.userId).order('id', {ascending:false}).limit(1).single();
+        if (data) {
+            alert(`【季度考績】\n達成率：${data.achievement_rate * 100}%\n考績評分：${data.score}\n老闆評語：${data.comments}`);
+        } else {
+            alert("尚無考績資料");
+        }
+    }
+
+    function showLeave() {
+        alert("請假模組已啟動，申請將送至老闆後台核准");
+    }
+
+    init();
+</script>
 </body>
 </html>
-
-
