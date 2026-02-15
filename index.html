@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>員工管理系統 1-1</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+    <style>
+        :root { --primary: #00b900; --bg: #f4f7f6; --text: #333; }
+        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 15px; color: var(--text); }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        .header { background: var(--primary); color: white; padding: 20px; text-align: center; border-radius: 0 0 20px 20px; margin: -15px -15px 20px -15px; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; margin-top: 10px; font-weight: bold; }
+        .btn-check { background: var(--primary); color: white; }
+        .btn-leave { background: #007bff; color: white; }
+        .info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+        .section { display: none; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .back-btn { background: #eee; border: none; padding: 8px 15px; border-radius: 5px; margin-bottom: 15px; cursor: pointer; }
+        .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2 style="margin:0;">員工管理系統 1-1</h2>
+    <div id="status" style="font-size:12px; opacity:0.8;">系統連線中...</div>
+</div>
+
+<div class="container">
+    <div id="main-menu">
+        <div class="card">
+            <div id="user-display" style="font-size:18px; font-weight:bold;">載入中...</div>
+            <div id="user-dept" style="font-size:12px; color:gray;">正在讀取基本資料...</div>
+        </div>
+        <div class="menu-grid">
+            <button class="btn btn-check" style="grid-column: span 2;" onclick="showSection('checkin')">📍 上下班打卡</button>
+            <button class="btn" style="background:white; border:1px solid #ddd;" onclick="showSection('profile')">👤 基本資料</button>
+            <button class="btn" style="background:white; border:1px solid #ddd;" onclick="showSection('salary')">💰 薪資查詢</button>
+            <button class="btn" style="background:white; border:1px solid #ddd;" onclick="showSection('leave')">📅 請假申請</button>
+            <button class="btn" style="background:white; border:1px solid #ddd;" onclick="showSection('eval')">📈 考績達成率</button>
+        </div>
+    </div>
+
+    <section id="profile" class="section">
+        <button class="back-btn" onclick="hideAll()">← 返回</button>
+        <div class="card">
+            <h3>👤 基本資料</h3>
+            <div id="profile-details"></div>
+        </div>
+    </section>
+
+    <section id="checkin" class="section">
+        <button class="back-btn" onclick="hideAll()">← 返回</button>
+        <div class="card">
+            <h3>📍 出勤打卡</h3>
+            <p id="gps-status" style="font-size:12px; color:blue;">正在定位...</p>
+            <button class="btn btn-check" onclick="doCheck('上班')">上班打卡</button>
+            <button class="btn" style="background:#666; color:white;" onclick="doCheck('下班')">下班打卡</button>
+        </div>
+    </section>
+
+    <section id="salary" class="section">
+        <button class="back-btn" onclick="hideAll()">← 返回</button>
+        <div class="card" id="salary-details">
+            <h3>💰 本月薪資明細</h3>
+            <p>正在從資料庫讀取...</p>
+        </div>
+    </section>
+
+    <section id="leave" class="section">
+        <button class="back-btn" onclick="hideAll()">← 返回</button>
+        <div class="card">
+            <h3>📅 請假申請</h3>
+            <label>假別選擇：</label>
+            <select id="l-type" class="btn" style="background:white; border:1px solid #ddd; color:black;">
+                <option>特休</option>
+                <option>病假</option>
+                <option>事假</option>
+            </select>
+            <button class="btn btn-leave" onclick="submitLeave()">送出申請</button>
+        </div>
+    </section>
+
+    <section id="eval" class="section">
+        <button class="back-btn" onclick="hideAll()">← 返回</button>
+        <div class="card" id="eval-details">
+            <h3>📈 考績達成率</h3>
+            <p>正在讀取評分資料...</p>
+        </div>
+    </section>
+</div>
+
+<script>
+    // --- 老闆請修改這裡 ---
+    const SUPABASE_URL = 'https://wbfaietjjgfgmgncxkbt.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_H5C7ddbzCgfKUp7MAQrUDQ_A9mGl_Pk';
+    const LIFF_ID = '您的_LIFF_ID';
+    // --------------------
+
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let currentUser = null;
+
+    async function init() {
+        try {
+            await liff.init({ liffId: LIFF_ID });
+            if (!liff.isLoggedIn()) {
+                liff.login();
+            } else {
+                const profile = await liff.getProfile();
+                currentUser = profile;
+                document.getElementById('status').innerText = "連線成功";
+                loadEmployeeData(profile.userId);
+            }
+        } catch (err) {
+            document.getElementById('status').innerText = "連線失敗: " + err;
+        }
+    }
+
+    async function loadEmployeeData(userId) {
+        const { data, error } = await supabaseClient.from('employees').select('*').eq('line_id', userId).single();
+        if (data) {
+            document.getElementById('user-display').innerText = data.name;
+            document.getElementById('user-dept').innerText = "入職時間: " + data.onboard_date;
+            
+            // 填充基本資料頁面
+            document.getElementById('profile-details').innerHTML = `
+                <div class="info-row"><span>電話</span><span>${data.phone || '未填'}</span></div>
+                <div class="info-row"><span>地址</span><span>${data.address || '未填'}</span></div>
+                <div class="info-row"><span>LINE ID</span><span>${data.line_id}</span></div>
+            `;
+
+            // 填充薪資頁面
+            document.getElementById('salary-details').innerHTML = `
+                <h3>💰 薪資單</h3>
+                <div class="info-row"><span>底薪</span><span>$${data.base_salary}</span></div>
+                <div class="info-row"><span>全勤獎金</span><span>$${data.full_attendance_bonus}</span></div>
+                <div class="info-row"><span>勞健保扣款</span><span>-$${data.labor_health_ins}</span></div>
+                <hr><div class="info-row"><strong>實領合計</strong><strong>$${data.base_salary + data.full_attendance_bonus - data.labor_health_ins}</strong></div>
+            `;
+            
+            loadPerformance(userId);
+        } else {
+            document.getElementById('user-display').innerText = "新員工 (未註冊)";
+        }
+    }
+
+    async function loadPerformance(userId) {
+        const { data } = await supabaseClient.from('performance').select('*').eq('line_id', userId).order('id', {ascending:false}).limit(1).single();
+        if (data) {
+            document.getElementById('eval-details').innerHTML = `
+                <h3>📈 考績達成率</h3>
+                <div class="info-row"><span>評核期間</span><span>${data.period}</span></div>
+                <div class="info-row"><span>考績分數</span><span>${data.score}</span></div>
+                <div class="info-row"><span>目標達成率</span><span>${data.achievement_rate * 100}%</span></div>
+                <div style="margin-top:10px; padding:10px; background:#f9f9f9; border-radius:5px;">評語：${data.comments || '無'}</div>
+            `;
+        }
+    }
+
+    async function doCheck(type) {
+        const pos = await liff.getLocation();
+        const { error } = await supabaseClient.from('attendance').insert([
+            { line_id: currentUser.userId, type: type, gps_location: `${pos.latitude},${pos.longitude}` }
+        ]);
+        if (!error) alert(type + " 打卡成功！");
+        else alert("失敗: " + error.message);
+    }
+
+    async function submitLeave() {
+        const type = document.getElementById('l-type').value;
+        const { error } = await supabaseClient.from('leave_requests').insert([
+            { line_id: currentUser.userId, type: type }
+        ]);
+        if (!error) alert("請假申請已送出，請等待老闆核准。");
+    }
+
+    function showSection(id) {
+        document.getElementById('main-menu').style.display = 'none';
+        document.getElementById(id).style.display = 'block';
+    }
+
+    function hideAll() {
+        document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+        document.getElementById('main-menu').style.display = 'block';
+    }
+
+    init();
+</script>
+</body>
+</html>
