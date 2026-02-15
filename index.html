@@ -10,24 +10,25 @@
 :root { --green:#00b900; --bg:#f8f9fa; --blue:#007bff; }
 body { font-family:sans-serif; background:var(--bg); padding:15px; margin:0; color:#333; }
 .card { background:white; padding:20px; border-radius:15px; box-shadow:0 4px 10px rgba(0,0,0,0.05); margin-bottom:15px; }
-input, select { width:100%; padding:12px; margin:8px 0; border:1px solid #ddd; border-radius:8px; font-size:16px; box-sizing:border-box; }
+input, select, textarea { width:100%; padding:12px; margin:8px 0; border:1px solid #ddd; border-radius:8px; font-size:16px; box-sizing:border-box; }
 .btn { width:100%; padding:15px; border:none; border-radius:10px; font-size:16px; font-weight:bold; color:white; background:var(--green); cursor:pointer; }
 .hidden { display:none!important; }
 .label { font-size:14px; color:#666; margin-top:10px; font-weight:bold; }
 .info-row { display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding:10px 0; font-size:14px; }
 .section-title { color:var(--green); border-left:4px solid var(--green); padding-left:10px; margin:0 0 15px 0; font-size:18px; font-weight:bold; }
+#loader { text-align:center; padding:50px; font-weight:bold; color:#666; }
 </style>
 </head>
 <body>
 
-<div id="loader" style="text-align:center;padding:50px;">🔄 HYPASS 系統啟動中...</div>
+<div id="loader">🔄 HYPASS 系統連線中...</div>
 
 <div id="reg-ui" class="card hidden">
     <h2 style="color:var(--green);margin-top:0;">👋 員工入職登錄</h2>
-    <div class="label">姓名</div><input type="text" id="reg-name">
-    <div class="label">電話</div><input type="tel" id="reg-phone">
-    <div class="label">入職日期</div><input type="date" id="reg-date">
-    <button class="btn" style="margin-top:20px;" onclick="submitReg()">提交並完成綁定</button>
+    <div class="label">姓名</div><input type="text" id="reg-name" placeholder="請輸入真實姓名">
+    <div class="label">電話</div><input type="tel" id="reg-phone" placeholder="請輸入聯絡電話">
+    <div class="label">到職日期</div><input type="date" id="reg-date">
+    <button class="btn" style="margin-top:20px;" onclick="submitReg()">提交並綁定系統</button>
 </div>
 
 <div id="main-ui" class="hidden">
@@ -45,29 +46,34 @@ input, select { width:100%; padding:12px; margin:8px 0; border:1px solid #ddd; b
     </div>
 
     <div class="card">
-        <p class="section-title">💰 薪資單</p>
-        <div id="salary-view">老闆核定中...</div>
+        <p class="section-title">📅 請假申請與狀態</p>
+        <select id="l-type"><option value="特休">特休</option><option value="病假">病假</option><option value="事假">事假</option></select>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom: 5px;">
+            <div><span style="font-size:12px; color:#666;">開始日期</span><input type="date" id="l-start"></div>
+            <div><span style="font-size:12px; color:#666;">結束日期</span><input type="date" id="l-end"></div>
+        </div>
+        <textarea id="l-reason" placeholder="請假事由 (選填)" rows="2"></textarea>
+        <button class="btn" style="background:var(--blue); margin-top:10px; margin-bottom:15px;" onclick="submitLeave()">送出假單</button>
+        
+        <div id="leave-history" style="font-size:14px; color:#555; background:#f9f9f9; padding:10px; border-radius:8px;">
+            讀取假單紀錄中...
+        </div>
     </div>
 
     <div class="card">
-        <p class="section-title">📅 請假申請</p>
-        <select id="l-type"><option>特休</option><option>病假</option><option>事假</option></select>
-        <input type="date" id="l-date" title="請假日期">
-        <button class="btn" style="background:var(--blue); margin-top:10px;" onclick="submitLeave()">送出假單</button>
-    </div>
-
-    <div class="card">
-        <p class="section-title">📈 考績達成率</p>
-        <div id="perf-view">考績評定中...</div>
+        <p class="section-title">💰 薪資單與 📈 考績</p>
+        <div id="salary-view" style="font-size:14px; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:10px;">薪資資料待老闆核定...</div>
+        <div id="perf-view" style="font-size:14px;">考績評定中...</div>
     </div>
 </div>
 
 <script>
-// ====== ⚠️ 必填區 ======
+// ==========================================
+// ⚠️ 呂老闆請務必填寫以下三個金鑰
+// ==========================================
 const S_URL = 'https://wbfaietjjgfgmgncxkbt.supabase.co';
 const S_KEY = 'sb_publishable_H5C7ddbzCgfKUp7MAQrUDQ_A9mGl_Pk';
 const L_ID  = '2009127303-4vmwjtZT';
-// ======================
 
 let supabaseClient;
 let currentUserId = null;
@@ -79,76 +85,132 @@ async function init() {
         if (!liff.isLoggedIn()) { liff.login(); return; }
         const profile = await liff.getProfile();
         currentUserId = profile.userId;
-        await checkUser(profile);
-    } catch (err) { document.getElementById("loader").innerText = "❌ 啟動失敗"; }
+        await loadUserData(profile.displayName);
+    } catch (err) { 
+        document.getElementById("loader").innerHTML = `<span style="color:red;">❌ 系統連線失敗</span>`; 
+    }
 }
 
-async function checkUser(profile) {
+async function loadUserData(lineName) {
     const { data } = await supabaseClient.from('employees').select('*').eq('line_id', currentUserId).maybeSingle();
     document.getElementById('loader').classList.add('hidden');
+    
     if (data) { 
         showMainUI(data); 
-        fetchPerf();
+        fetchPerformance();
+        fetchLeaveHistory(); // 抓取請假狀態
     } else { 
         document.getElementById('reg-ui').classList.remove('hidden');
-        document.getElementById('reg-name').value = profile.displayName;
+        document.getElementById('reg-name').value = lineName;
     }
 }
 
 async function submitReg() {
     const name = document.getElementById('reg-name').value;
     const date = document.getElementById('reg-date').value;
-    if(!name || !date) return alert("姓名與日期必填");
+    if(!name || !date) return alert("⚠️ 姓名與到職日期為必填項目");
+
     const { error } = await supabaseClient.from('employees').insert([{
-        line_id: currentUserId, name: name,
-        phone: document.getElementById('reg-phone').value,
+        line_id: currentUserId, name: name, phone: document.getElementById('reg-phone').value,
         onboard_date: date, annual_leave_used: 0
     }]);
-    if (!error) { alert("註冊成功！"); location.reload(); }
-    else alert("失敗: " + error.message);
+
+    if (!error) { alert("✅ 註冊成功！系統已綁定"); location.reload(); } 
+    else { alert("❌ 註冊失敗: " + error.message); }
 }
 
 function showMainUI(user) {
     document.getElementById('main-ui').classList.remove('hidden');
     document.getElementById('u-name').innerText = user.name;
     
-    // 年資假核算：滿半年3天, 滿一年7天
     const start = new Date(user.onboard_date);
     const months = (new Date() - start) / (1000*60*60*24*30);
-    let total = months >= 12 ? 7 : (months >= 6 ? 3 : 0);
-    document.getElementById('u-leave').innerText = `入職：${user.onboard_date} | 特休剩餘：${total - (user.annual_leave_used || 0)} 天`;
+    let total = months >= 36 ? 10 : (months >= 12 ? 7 : (months >= 6 ? 3 : 0));
+    document.getElementById('u-leave').innerText = `到職：${user.onboard_date} | 特休剩餘：${total - (user.annual_leave_used || 0)} 天`;
 
     if (user.base_salary > 0) {
+        const bonus = user.full_attendance_bonus || 0;
+        const ins = user.labor_health_ins || 0;
         document.getElementById('salary-view').innerHTML = `
             <div class="info-row"><span>底薪</span><span>$${user.base_salary}</span></div>
-            <div class="info-row"><span>全勤</span><span>$${user.full_attendance_bonus}</span></div>
-            <div class="info-row" style="color:var(--green); font-weight:bold;"><span>實領預估</span><span>$${user.base_salary + user.full_attendance_bonus - user.labor_health_ins}</span></div>
+            <div class="info-row"><span>全勤獎金</span><span>$${bonus}</span></div>
+            <div class="info-row"><span>勞健保扣除</span><span style="color:red;">-$${ins}</span></div>
+            <div class="info-row" style="color:var(--green); font-weight:bold;"><span>實領預估</span><span>$${user.base_salary + bonus - ins}</span></div>
         `;
     }
 }
 
-async function fetchPerf() {
-    const { data } = await supabaseClient.from('performance').select('*').eq('line_id', currentUserId).maybeSingle();
+// === 功能 1：打卡 (每天限制一次) ===
+async function doCheck(actionType) {
+    // 取得今天的日期 (台灣時間)
+    const todayStr = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
+    // 檢查今天是否已經打過同樣的卡
+    const { data: existing } = await supabaseClient.from('attendance')
+        .select('*').eq('line_id', currentUserId).eq('action_type', actionType)
+        .gte('check_time', todayStr + 'T00:00:00+08:00');
+
+    if (existing && existing.length > 0) {
+        return alert(`⚠️ 您今天已經打過【${actionType}】卡了，每天僅限一次！`);
+    }
+
+    // 寫入打卡紀錄 (注意這裡改成 action_type)
+    const { error } = await supabaseClient.from('attendance').insert([{ 
+        line_id: currentUserId, action_type: actionType 
+    }]);
+    
+    if (error) alert("❌ 打卡失敗: " + error.message);
+    else alert(`✅ ${actionType}打卡成功！`);
+}
+
+// === 功能 2：送出假單與查詢狀態 ===
+async function submitLeave() {
+    const start = document.getElementById('l-start').value;
+    const end = document.getElementById('l-end').value;
+    if(!start || !end) return alert("⚠️ 請填寫完整的開始與結束日期");
+
+    const { error } = await supabaseClient.from('leave_requests').insert([{ 
+        line_id: currentUserId, leave_type: document.getElementById('l-type').value, 
+        start_dt: start, end_dt: end, reason: document.getElementById('l-reason').value,
+        status: '待主管審核'
+    }]);
+
+    if (!error) {
+        alert("✅ 假單已送出！");
+        fetchLeaveHistory(); // 重新整理狀態列表
+    } else {
+        alert("❌ 送出失敗: " + error.message);
+    }
+}
+
+// 抓取主管核准狀態
+async function fetchLeaveHistory() {
+    const { data } = await supabaseClient.from('leave_requests')
+        .select('*').eq('line_id', currentUserId).order('created_at', {ascending: false}).limit(3);
+    
+    if (data && data.length > 0) {
+        let html = '<strong style="color:var(--green);">近期請假紀錄：</strong><br>';
+        data.forEach(req => {
+            let color = req.status === '已核准' ? 'green' : (req.status === '待主管審核' ? '#f39c12' : 'red');
+            html += `<div style="border-bottom:1px solid #ccc; padding:8px 0;">
+                <div>${req.start_dt} ~ ${req.end_dt} (${req.leave_type})</div>
+                <div style="font-size:13px;">審核進度：<span style="color:${color}; font-weight:bold;">${req.status}</span></div>
+            </div>`;
+        });
+        document.getElementById('leave-history').innerHTML = html;
+    } else {
+        document.getElementById('leave-history').innerHTML = "尚無請假紀錄";
+    }
+}
+
+async function fetchPerformance() {
+    const { data } = await supabaseClient.from('performance').select('*').eq('line_id', currentUserId).order('id', {ascending:false}).limit(1).maybeSingle();
     if (data) {
         document.getElementById('perf-view').innerHTML = `
             <div class="info-row"><span>考績成績</span><span>${data.score} 分</span></div>
-            <div class="info-row"><span>達成率</span><span style="color:blue; font-weight:bold;">${(data.achievement_rate * 100).toFixed(0)}%</span></div>
+            <div class="info-row"><span>達成率</span><span style="color:var(--blue); font-weight:bold;">${(data.achievement_rate * 100).toFixed(0)}%</span></div>
         `;
     }
-}
-
-async function doCheck(type) {
-    const { error } = await supabaseClient.from('attendance').insert([{ line_id: currentUserId, type: type }]);
-    if (error) alert("打卡失敗: " + error.message);
-    else alert(type + "成功！");
-}
-
-async function submitLeave() {
-    const { error } = await supabaseClient.from('leave_requests').insert([{ 
-        line_id: currentUserId, leave_type: document.getElementById('l-type').value, 
-        start_dt: document.getElementById('l-date').value 
-    }]);
-    if (!error) alert("申請已送出");
 }
 
 init();
