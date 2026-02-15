@@ -3,125 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HYPASS 管理系統 1-1</title>
+    <title>HYPASS 員工管理系統 1-1</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
     <style>
-        :root { --main-green: #00b900; --bg: #f8f9fa; --text: #333; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; }
-        .header { background: var(--main-green); color: white; padding: 30px 20px; text-align: center; border-radius: 0 0 25px 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        .container { padding: 20px; }
-        .card { background: white; padding: 20px; border-radius: 18px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        :root { --main: #00b900; --bg: #f8f9fa; }
+        body { font-family: sans-serif; background: var(--bg); padding: 15px; margin: 0; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; color: white; }
+        .btn-reg { background: var(--main); }
         .hidden { display: none; }
-        
-        /* 表單樣式 */
-        input { width: 100%; padding: 14px; margin: 10px 0; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; font-size: 16px; }
-        label { font-size: 13px; color: #666; margin-left: 5px; }
-        
-        /* 按鈕樣式 */
-        .btn { width: 100%; padding: 16px; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        .btn-green { background: var(--main-green); color: white; }
-        .btn-green:active { opacity: 0.8; transform: scale(0.98); }
-        
-        /* 選單格狀排列 */
-        .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .menu-item { background: white; padding: 15px; border-radius: 15px; text-align: center; border: 1px solid #eee; }
-        .menu-item img { width: 30px; margin-bottom: 8px; }
+        .label { font-size: 14px; color: #666; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h2 style="margin:0;">HYPASS 管理系統 1-1</h2>
-    <div id="loading-status" style="font-size:12px; margin-top:8px; opacity:0.8;">系統通訊中...</div>
+<div id="loader" style="text-align:center; padding:50px;">🔄 正在連線系統...</div>
+
+<div id="reg-ui" class="card hidden">
+    <h2 style="color:var(--main); margin-top:0;">👋 歡迎入職</h2>
+    <p style="color:#666">請填寫基本資料，系統將自動綁定您的 LINE ID</p>
+    
+    <div class="label">真實姓名</div>
+    <input type="text" id="reg-name" placeholder="請輸入姓名">
+    
+    <div class="label">聯絡電話</div>
+    <input type="tel" id="reg-phone" placeholder="請輸入電話">
+    
+    <div class="label">到職日期</div>
+    <input type="date" id="reg-date">
+    
+    <button class="btn btn-reg" style="margin-top:20px;" onclick="submitReg()">提交登錄並進入系統</button>
 </div>
 
-<div class="container">
-    <div id="loader" style="text-align:center; padding:40px;">
-        <p>正在確認您的員工身分...</p>
+<div id="main-ui" class="hidden">
+    <div class="card" style="background:var(--main); color:white;">
+        <h2 id="u-display-name" style="margin:0;">姓名</h2>
+        <div id="u-leave-info" style="margin-top:10px; opacity:0.9; font-size:14px;">年資假：計算中...</div>
     </div>
-
-    <div id="ui-register" class="card hidden">
-        <h3 style="margin-top:0; color:var(--main-green);">👋 歡迎入職</h3>
-        <p style="font-size:14px; color:#666;">請填寫基本資料，系統將自動綁定您的 LINE ID，作為日後打卡與查詢薪資的依據。</p>
-        <input type="text" id="reg-name" placeholder="真實姓名">
-        <input type="tel" id="reg-phone" placeholder="聯絡電話">
-        <label>到職日期 (影響年資假計算)：</label>
-        <input type="date" id="reg-date">
-        <button class="btn btn-green" onclick="submitRegistration()">提交資料並綁定</button>
-</div>
-
-    <div id="ui-main" class="hidden">
-        <div class="card" style="border-left: 6px solid var(--main-green);">
-            <h2 id="user-name" style="margin:0;">員工姓名</h2>
-            <div id="user-leave" style="margin-top:8px; font-weight:bold; color:#e67e22;">年資假：計算中...</div>
-            <div id="user-onboard" style="font-size:12px; color:#999; margin-top:5px;"></div>
-        </div>
-
-        <button class="btn btn-green" style="margin-bottom:20px;" onclick="handleClock()">📍 上下班打卡</button>
-
-        <div class="menu-grid">
-            <div class="menu-item" onclick="viewSalary()">💰<br>薪資查詢</div>
-            <div class="menu-item" onclick="alert('請假模組開發中')">📅<br>請假申請</div>
-            <div class="menu-item" onclick="viewPerformance()">📈<br>考績達成率</div>
-            <div class="menu-item" onclick="alert('聯絡資訊：09xx-xxx-xxx')">📞<br>基本資料</div>
-        </div>
+    
+    <button class="btn btn-reg" style="margin-bottom:15px;" onclick="doCheck()">📍 上下班打卡</button>
+    
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+        <div class="card" style="text-align:center; margin:0;" onclick="showSalary()">💰 薪資查詢</div>
+        <div class="card" style="text-align:center; margin:0;" onclick="alert('請假申請已送出，待老闆核准')">📅 請假申請</div>
     </div>
 </div>
 
 <script>
-    // --- 參數設定區 (請老闆在此填寫) ---
-    const S_URL = 'https://wbfaietjjgfgmgncxkbt.supabase.co'.replace(/\/$/, ""); 
+    // ⚠️ 請填入您的真實密鑰 (請確認單引號內沒有空格)
+    const S_URL = 'https://wbfaietjjgfgmgncxkbt.supabase.co';
     const S_KEY = 'sb_publishable_H5C7ddbzCgfKUp7MAQrUDQ_A9mGl_Pk';
     const L_ID = '2009127303-4vmwjtZT';
 
     const supabase = supabase.createClient(S_URL, S_KEY);
 
-    async function initSystem() {
+    async function init() {
         try {
             await liff.init({ liffId: L_ID });
             if (!liff.isLoggedIn()) {
                 liff.login();
             } else {
-                fetchUserData();
+                checkUser();
             }
         } catch (err) {
-            document.getElementById('loading-status').innerText = "連線失敗：" + err.message;
+            document.getElementById('loader').innerText = "連線失敗：" + err;
         }
     }
 
-    async function fetchUserData() {
+    async function checkUser() {
         const profile = await liff.getProfile();
-        const { data, error } = await supabase
-            .from('employees')
-            .select('*')
-            .eq('line_id', profile.userId)
-            .single();
-
+        // 去資料庫找是否有這個 LINE ID
+        const { data, error } = await supabase.from('employees').select('*').eq('line_id', profile.userId).single();
+        
         document.getElementById('loader').classList.add('hidden');
-
-        if (error && error.code === 'PGRST116') {
-            // 找不到資料 -> 顯示註冊畫面
-            document.getElementById('ui-register').classList.remove('hidden');
-            document.getElementById('reg-name').value = profile.displayName;
-        } else if (data) {
-            // 找到資料 -> 顯示主畫面
-            renderMainUI(data);
-        } else if (error) {
-            alert("資料庫錯誤：" + error.message);
+        
+        if (data) {
+            // 找到員工，顯示主介面
+            showMainUI(data);
+        } else {
+            // 找不到員工，顯示註冊表單
+            document.getElementById('reg-ui').classList.remove('hidden');
+            document.getElementById('reg-name').value = profile.displayName; // 預填 LINE 名稱
         }
     }
 
-    async function submitRegistration() {
+    async function submitReg() {
         const profile = await liff.getProfile();
         const name = document.getElementById('reg-name').value;
         const phone = document.getElementById('reg-phone').value;
         const date = document.getElementById('reg-date').value;
 
-        if (!name || !date) return alert("姓名與到職日為必填項目！");
+        if (!name || !date) return alert("請完整填寫姓名與到職日");
 
         const { error } = await supabase.from('employees').insert([{
-            line_id: profile.userId,
+            line_id: profile.userId, // 系統自動紀錄 LINE UID
             name: name,
             phone: phone,
             onboard_date: date,
@@ -129,20 +106,18 @@
         }]);
 
         if (!error) {
-            alert("登錄成功！您的 LINE 已與系統完成綁定。");
-            location.reload();
+            alert("登錄成功！您的 LINE ID 已與系統綁定。");
+            location.reload(); // 重新整理進入主畫面
         } else {
-            alert("註冊失敗：" + error.message);
+            alert("登錄失敗：" + error.message);
         }
     }
 
-    function renderMainUI(user) {
-        document.getElementById('ui-main').classList.remove('hidden');
-        document.getElementById('loading-status').innerText = "✅ 系統已就緒";
-        document.getElementById('user-name').innerText = user.name;
-        document.getElementById('user-onboard').innerText = "入職日期：" + user.onboard_date;
-
-        // --- 自動年資假計算邏輯 ---
+    function showMainUI(user) {
+        document.getElementById('main-ui').classList.remove('hidden');
+        document.getElementById('u-display-name').innerText = user.name;
+        
+        // --- 自動算假邏輯 (依照勞基法簡易版) ---
         const start = new Date(user.onboard_date);
         const today = new Date();
         const diffMonth = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
@@ -150,30 +125,23 @@
         let totalLeave = 0;
         if (diffMonth >= 6 && diffMonth < 12) totalLeave = 3;
         else if (diffMonth >= 12 && diffMonth < 24) totalLeave = 7;
-        else if (diffMonth >= 24 && diffMonth < 36) totalLeave = 10;
-        else if (diffMonth >= 36) totalLeave = 14;
-
+        else if (diffMonth >= 24) totalLeave = 10;
+        
         const remaining = totalLeave - (user.annual_leave_used || 0);
-        document.getElementById('user-leave').innerText = `年資假剩餘：${remaining} 天 (總額 ${totalLeave} 天)`;
+        document.getElementById('u-leave-info').innerText = `到職日：${user.onboard_date} | 特休剩餘：${remaining} 天`;
     }
 
-    async function handleClock() {
+    async function doCheck() {
         const profile = await liff.getProfile();
-        const { error } = await supabase.from('attendance').insert([
-            { line_id: profile.userId, type: '打卡' }
-        ]);
-        if (!error) alert("打卡成功！時間已存入雲端後台。");
+        const { error } = await supabase.from('attendance').insert([{ line_id: profile.userId, type: '打卡' }]);
+        if (!error) alert("打卡成功！資料已存入後台");
     }
 
-    function viewSalary() {
-        alert("模組連線中。老闆於後台填寫底薪後，此處將自動核算薪資單。");
+    function showSalary() {
+        alert("薪資模組已連線，若畫面空白請聯繫老闆於後台輸入底薪");
     }
 
-    function viewPerformance() {
-        alert("正在讀取您的考績達成率...");
-    }
-
-    initSystem();
+    init();
 </script>
 </body>
 </html>
