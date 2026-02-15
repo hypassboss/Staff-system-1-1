@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HYPASS 員工管理系統 1-1</title>
+    <title>HYPASS 管理系統 1-1</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
     <style>
@@ -11,48 +11,49 @@
         body { font-family: sans-serif; background: var(--bg); padding: 15px; margin: 0; }
         .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 15px; }
         input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
-        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; color: white; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; color: white; transition: 0.3s; }
         .btn-reg { background: var(--main); }
-        .hidden { display: none; }
-        .label { font-size: 14px; color: #666; margin-top: 10px; }
+        .btn-reg:active { background: #008800; }
+        .hidden { display: none !important; }
+        .label { font-size: 14px; color: #666; margin-top: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div id="loader" style="text-align:center; padding:50px;">🔄 正在連線系統...</div>
+<div id="loader" style="text-align:center; padding:50px;">🔄 系統啟動中...</div>
 
 <div id="reg-ui" class="card hidden">
-    <h2 style="color:var(--main); margin-top:0;">👋 歡迎入職</h2>
-    <p style="color:#666">請填寫基本資料，系統將自動綁定您的 LINE ID</p>
+    <h2 style="color:var(--main); margin-top:0;">👋 員工入職登錄</h2>
+    <p style="color:#666; font-size:14px;">資料將自動與您的 LINE 帳號綁定</p>
     
-    <div class="label">真實姓名</div>
-    <input type="text" id="reg-name" placeholder="請輸入姓名">
+    <div class="label">姓名</div>
+    <input type="text" id="reg-name" placeholder="請輸入真實姓名">
     
-    <div class="label">聯絡電話</div>
-    <input type="tel" id="reg-phone" placeholder="請輸入電話">
+    <div class="label">電話</div>
+    <input type="tel" id="reg-phone" placeholder="請輸入聯絡電話">
     
     <div class="label">到職日期</div>
     <input type="date" id="reg-date">
     
-    <button class="btn btn-reg" style="margin-top:20px;" onclick="submitReg()">提交登錄並進入系統</button>
+    <button class="btn btn-reg" style="margin-top:20px;" onclick="submitReg()">提交資料並進入系統</button>
 </div>
 
 <div id="main-ui" class="hidden">
     <div class="card" style="background:var(--main); color:white;">
-        <h2 id="u-display-name" style="margin:0;">姓名</h2>
-        <div id="u-leave-info" style="margin-top:10px; opacity:0.9; font-size:14px;">年資假：計算中...</div>
+        <h2 id="u-display-name" style="margin:0;">載入中...</h2>
+        <div id="u-leave-info" style="margin-top:10px; opacity:0.9; font-size:14px;">正在核算年資假期...</div>
     </div>
     
-    <button class="btn btn-reg" style="margin-bottom:15px;" onclick="doCheck()">📍 上下班打卡</button>
+    <button class="btn btn-reg" style="margin-bottom:15px;" onclick="doCheck()">📍 員工上下班打卡</button>
     
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-        <div class="card" style="text-align:center; margin:0;" onclick="showSalary()">💰 薪資查詢</div>
-        <div class="card" style="text-align:center; margin:0;" onclick="alert('請假申請已送出，待老闆核准')">📅 請假申請</div>
+        <div class="card" style="text-align:center; margin:0;" onclick="showSalary()">💰 薪資表</div>
+        <div class="card" style="text-align:center; margin:0;" onclick="alert('假單已送出，請等待老闆於後台核准扣假')">📅 請假申請</div>
     </div>
 </div>
 
 <script>
-    // ⚠️ 請填入您的真實密鑰 (請確認單引號內沒有空格)
+    // ⚠️ 老闆請填入您的正確資訊
     const S_URL = 'https://wbfaietjjgfgmgncxkbt.supabase.co';
     const S_KEY = 'sb_publishable_H5C7ddbzCgfKUp7MAQrUDQ_A9mGl_Pk';
     const L_ID = '2009127303-4vmwjtZT';
@@ -65,80 +66,78 @@
             if (!liff.isLoggedIn()) {
                 liff.login();
             } else {
-                checkUser();
+                fetchUserData();
             }
         } catch (err) {
-            document.getElementById('loader').innerText = "連線失敗：" + err;
+            document.getElementById('loader').innerText = "LINE連線失敗，請重新開啟";
         }
     }
 
-    async function checkUser() {
+    async function fetchUserData() {
         const profile = await liff.getProfile();
-        // 去資料庫找是否有這個 LINE ID
+        // 嘗試從資料庫抓取資料
         const { data, error } = await supabase.from('employees').select('*').eq('line_id', profile.userId).single();
         
         document.getElementById('loader').classList.add('hidden');
         
         if (data) {
-            // 找到員工，顯示主介面
+            // 已經註冊過，直接顯示主頁
             showMainUI(data);
         } else {
-            // 找不到員工，顯示註冊表單
+            // 沒資料，顯示註冊表單
             document.getElementById('reg-ui').classList.remove('hidden');
-            document.getElementById('reg-name').value = profile.displayName; // 預填 LINE 名稱
+            document.getElementById('reg-name').value = profile.displayName;
         }
     }
 
     async function submitReg() {
         const profile = await liff.getProfile();
-        const name = document.getElementById('reg-name').value;
-        const phone = document.getElementById('reg-phone').value;
-        const date = document.getElementById('reg-date').value;
+        const n = document.getElementById('reg-name').value;
+        const p = document.getElementById('reg-phone').value;
+        const d = document.getElementById('reg-date').value;
 
-        if (!name || !date) return alert("請完整填寫姓名與到職日");
+        if (!n || !d) return alert("姓名與到職日為必填！");
 
         const { error } = await supabase.from('employees').insert([{
-            line_id: profile.userId, // 系統自動紀錄 LINE UID
-            name: name,
-            phone: phone,
-            onboard_date: date,
+            line_id: profile.userId,
+            name: n,
+            phone: p,
+            onboard_date: d,
             annual_leave_used: 0
         }]);
 
         if (!error) {
-            alert("登錄成功！您的 LINE ID 已與系統綁定。");
-            location.reload(); // 重新整理進入主畫面
-        } else {
-            alert("登錄失敗：" + error.message);
-        }
+            alert("登錄成功！您的 ID 已綁定。");
+            location.reload();
+        } else { alert("錯誤：" + error.message); }
     }
 
     function showMainUI(user) {
         document.getElementById('main-ui').classList.remove('hidden');
         document.getElementById('u-display-name').innerText = user.name;
         
-        // --- 自動算假邏輯 (依照勞基法簡易版) ---
+        // --- 核心邏輯：依照入職日自動算假 ---
         const start = new Date(user.onboard_date);
         const today = new Date();
-        const diffMonth = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+        const months = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
         
-        let totalLeave = 0;
-        if (diffMonth >= 6 && diffMonth < 12) totalLeave = 3;
-        else if (diffMonth >= 12 && diffMonth < 24) totalLeave = 7;
-        else if (diffMonth >= 24) totalLeave = 10;
+        let total = 0;
+        if (months >= 6 && months < 12) total = 3;
+        else if (months >= 12 && months < 24) total = 7;
+        else if (months >= 24) total = 10;
         
-        const remaining = totalLeave - (user.annual_leave_used || 0);
-        document.getElementById('u-leave-info').innerText = `到職日：${user.onboard_date} | 特休剩餘：${remaining} 天`;
+        const used = user.annual_leave_used || 0;
+        document.getElementById('u-leave-info').innerText = `到職日：${user.onboard_date} | 特休剩餘：${total - used} 天`;
     }
 
     async function doCheck() {
         const profile = await liff.getProfile();
         const { error } = await supabase.from('attendance').insert([{ line_id: profile.userId, type: '打卡' }]);
-        if (!error) alert("打卡成功！資料已存入後台");
+        if (!error) alert("打卡成功！時間已存入後台");
     }
 
     function showSalary() {
-        alert("薪資模組已連線，若畫面空白請聯繫老闆於後台輸入底薪");
+        alert("薪資明細：底薪與全勤獎金需由老闆於後台填寫後才會顯示。");
     }
 
     init();
